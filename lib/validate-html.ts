@@ -53,14 +53,42 @@ function whitelisted(host: string): boolean {
 }
 
 export function validateHtml(raw: string): { ok: boolean; cleaned: string; errors: string[] } {
-  const errors: string[] = [];
+  // const errors: string[] = [];
 
-  // 1. 剥 markdown 围栏
-  const stripped = raw
-    .trim()
-    .replace(/^```(?:html)?\s*/i, "")
-    .replace(/```\s*$/, "")
-    .trim();
+  // // 1. 剥 markdown 围栏
+  // const stripped = raw
+  //   .trim()
+  //   .replace(/^```(?:html)?\s*/i, "")
+  //   .replace(/```\s*$/, "")
+  //   .trim();
+
+  // if (!stripped) {
+  //   return { ok: false, cleaned: "", errors: ["empty output after stripping fences"] };
+  // }
+
+    const errors: string[] = [];
+
+  // 1. 提取 HTML 文档本身，剥掉模型可能附带的前言/尾巴/markdown 围栏。
+  //    话痨模型（如 DeepSeek）常在 HTML 前后加自然语言说明和 ```html 围栏，
+  //    仅靠“剥两端围栏”会漏；改为直接定位 <!DOCTYPE/<html ... </html> 这一段。
+  let stripped = raw.trim();
+
+  // 1a. 先去掉 markdown 代码围栏（```html ... ```），无论它在整段何处包裹代码
+  const fence = /```(?:html|HTML)?\s*([\s\S]*?)```/;
+  const fenceMatch = fence.exec(stripped);
+  if (fenceMatch && /<(?:!doctype|html)/i.test(fenceMatch[1])) {
+    stripped = fenceMatch[1].trim();
+  }
+
+  // 1b. 截取真正的 HTML 文档：从第一个 <!DOCTYPE 或 <html> 开始，到最后一个 </html> 结束，
+  //     丢弃前言（Here is a ...）和尾巴（Optimization Tip ...）等非 HTML 文本
+  const startMatch = /<!doctype\s+html|<html[\s>]/i.exec(stripped);
+  if (startMatch) {
+    const start = startMatch.index;
+    const closeIdx = stripped.toLowerCase().lastIndexOf("</html>");
+    const end = closeIdx >= 0 ? closeIdx + "</html>".length : stripped.length;
+    stripped = stripped.slice(start, end).trim();
+  }
 
   if (!stripped) {
     return { ok: false, cleaned: "", errors: ["empty output after stripping fences"] };
