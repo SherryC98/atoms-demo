@@ -9,6 +9,7 @@ import {
   createProject, appendTurn, loadAllProjects, loadProject, loadMessages, restoreVersion,
   type MessageRow, type ProjectListItem,
 } from "@/lib/persistence";
+import { BUILD_INFO } from "@/lib/build-info";
 
 const EXAMPLES = ["做一个待办清单", "做一个计算器", "做一个番茄钟"];
 
@@ -164,13 +165,16 @@ export default function Home() {
     }
   }
 
-  async function handleRestore(messageId: string, snapshot: string) {
+  // 回滚（git revert 语义）：追加一个不可变的新版本，而非改写指针。
+  // fromLabel 如 "v2"，会写进新版本说明并显示在版本历史里。
+  async function handleRestore(snapshot: string, fromLabel: string) {
     if (!projectId) return;
     setBusy(true); setError(null);
     try {
       const sb = getBrowserClient();
-      await restoreVersion(sb, projectId, messageId, snapshot); // 同步更新 projects.current_version_id
+      await restoreVersion(sb, projectId, snapshot, fromLabel);
       setCode(snapshot);
+      setMessages(await loadMessages(sb, projectId)); // 重新拉取，让新增的回滚版本出现在版本历史
       setTab("preview");
       setStage("done");
     } catch (e: any) {
@@ -274,8 +278,10 @@ export default function Home() {
             <div style={{ padding: "4px 12px 8px", maxHeight: 200, overflow: "auto" }}>
               {messages.filter((m) => m.role === "assistant" && m.code_snapshot).map((m, i) => (
                 <div key={m.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, padding: "6px 0" }}>
-                  <span style={{ fontSize: 13, color: "var(--text-muted)" }}>v{i + 1} · {new Date(m.created_at).toLocaleTimeString()} · {m.mode}</span>
-                  <button className="btn" onClick={() => handleRestore(m.id, m.code_snapshot!)} disabled={busy} style={{ padding: "4px 10px", fontSize: 13 }}>回到这一版</button>
+                  <span style={{ fontSize: 13, color: m.mode === "revert" ? "var(--primary)" : "var(--text-muted)" }}>
+                    v{i + 1} · {new Date(m.created_at).toLocaleTimeString()} · {m.mode === "revert" ? `↩ ${m.content}` : m.mode}
+                  </span>
+                  <button className="btn" onClick={() => handleRestore(m.code_snapshot!, `v${i + 1}`)} disabled={busy} style={{ padding: "4px 10px", fontSize: 13 }}>回到这一版</button>
                 </div>
               ))}
               {messages.filter((m) => m.role === "assistant" && m.code_snapshot).length === 0 && <span style={{ color: "var(--text-muted)", fontSize: 13 }}>暂无版本</span>}
@@ -296,6 +302,11 @@ export default function Home() {
             style={{ flex: 1 }}
           />
           <button className="btn btn-primary" onClick={submit} disabled={busy}>{busy ? "…" : "发送"}</button>
+        </div>
+
+        {/* 构建版本：供核对线上与 GitHub 提交的对应关系（完整信息见 /api/version 或 window.__ATOMS_BUILD__） */}
+        <div style={{ padding: "4px 12px 8px", fontSize: 11, color: "var(--text-faint)", textAlign: "center" }}>
+          build {BUILD_INFO.sha === "dev" ? "dev" : BUILD_INFO.sha.slice(0, 7)} · {BUILD_INFO.ref}
         </div>
       </div>
 

@@ -83,12 +83,26 @@ export async function loadMessages(sb: SupabaseClient, projectId: string): Promi
   return (data as MessageRow[]) ?? [];
 }
 
-// Restore：把项目当前版本指回某条历史 assistant 消息（Task 9 用）
+// Restore（git revert 语义）：不改写历史，而是追加一个不可变的新版本。
+// 例如 v1→v2→v3，回滚到 v2 会生成 v4（code_snapshot = v2 的快照，mode='revert'），
+// 版本链连续可审计；旧版本全部保留，当前指针指向新版本 v4。
+// fromLabel 用于说明这条回滚来自哪一版（如 "v2"），写进 assistant 消息内容。
 export async function restoreVersion(
-  sb: SupabaseClient, projectId: string, messageId: string, code: string
-): Promise<void> {
-  const { error } = await sb.from("projects")
-    .update({ current_code: code, current_version_id: messageId, updated_at: new Date().toISOString() })
+  sb: SupabaseClient, projectId: string, code: string, fromLabel: string
+): Promise<string> {
+  const { data: asst, error: aErr } = await sb.from("messages")
+    .insert({
+      project_id: projectId, role: "assistant",
+      content: `回滚到 ${fromLabel}`, stage: "done", mode: "revert", code_snapshot: code,
+    })
+    .select("id")
+    .single();
+  if (aErr) throw aErr;
+
+  const { error: pErr } = await sb.from("projects")
+    .update({ current_code: code, current_version_id: asst.id, updated_at: new Date().toISOString() })
     .eq("id", projectId);
-  if (error) throw error;
+  if (pErr) throw pErr;
+
+  return asst.id as string;
 }
