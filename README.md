@@ -27,7 +27,7 @@ Next.js Route Handlers (app/api/*)
   ├─ /api/validate  parse5 解析 → 结构校验 → 外链白名单校验 → 注入可信 CSP
   └─ /api/repair    校验失败时把错误反馈给 LLM，要求修复后重新生成
         │
-        ├─ lib/llm.ts          走公司 OpenAI 兼容网关（openai SDK + 自定义 baseURL）
+        ├─ lib/llm.ts          走 OpenAI 兼容网关（openai SDK + 自定义 baseURL）
         ├─ lib/validate-html.ts  parse5 AST 校验与清洗（详见 docs/WRITEUP.md）
         └─ lib/rate-limit.ts    调用 Supabase RPC 做原子限流，fail-closed
 
@@ -43,7 +43,7 @@ Supabase (Postgres + Auth)
 ## 技术栈
 
 - **框架**：Next.js 15（App Router，Turbopack），React 19，TypeScript
-- **LLM**：通过公司内部提供的 OpenAI 协议兼容网关调用（`openai` SDK + 自定义 `baseURL`），非直连官方 API
+- **LLM**：通过 OpenAI 协议兼容网关调用（`openai` SDK + 自定义 `baseURL`），非直连官方 API
 - **数据与鉴权**：Supabase（Postgres + Row Level Security + 匿名登录 Auth）
 - **HTML 校验/清洗**：`parse5`（AST 级解析，剥 markdown 围栏、结构检查、CDN 白名单扫描、CSP 注入）
 - **测试**：Vitest（对纯逻辑模块做单元测试：validate-html / prompts / rate-limit）
@@ -67,7 +67,7 @@ npm run dev
 
 | 变量 | 说明 |
 |---|---|
-| `LLM_BASE_URL` | 公司 OpenAI 协议兼容网关的 base URL（仅服务端使用，不下发到浏览器） |
+| `LLM_BASE_URL` | OpenAI 协议兼容网关的 base URL（仅服务端使用，不下发到浏览器） |
 | `LLM_API_KEY` | 网关鉴权密钥（仅服务端使用，绝不出现在前端打包产物或 Network 响应体中） |
 | `LLM_MODEL` | 调用的模型名 |
 | `NEXT_PUBLIC_SUPABASE_URL` | Supabase 项目 URL（浏览器端可见，Supabase 设计上允许公开） |
@@ -77,7 +77,7 @@ npm run dev
 
 ## 关键取舍
 
-- **走公司网关而非直连模型官方 API**：牺牲了一部分官方 SDK 的高级特性（如原生流式 SSE），换来的是密钥集中管控、成本可审计、符合公司安全合规要求——细节见 `docs/WRITEUP.md`。
+- **走网关而非直连模型官方 API**：牺牲了一部分官方 SDK 的高级特性（如原生流式 SSE），换来的是密钥集中管控、成本可审计、符合安全合规要求——细节见 `docs/WRITEUP.md`。
 - **阶段展示用离散状态机而非真实 SSE 流式**：`planning → building → validating → (fixing) → done` 是按请求边界推进的粗粒度阶段条，不是逐 token 流式输出。换来的是实现简单、每一步都有明确的可重试边界，代价是单步耗时较长时用户看不到"打字机"式反馈。
 - **CDN 外链只开白名单三家（cdnjs / jsdelivr / cdn.tailwindcss.com）**：牺牲了模型生成时更自由的库选择，换来的是可预测、可审计的攻击面，配合 CSP 兜底。
 - **校验失败允许一次自动修复重试，第二次仍失败直接抛异常**：不返回、不预览、不落库任何未通过校验的代码，保证用户看到的应用一定是通过安全校验的。

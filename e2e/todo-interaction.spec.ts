@@ -17,7 +17,7 @@ import { test, expect, type Page, type FrameLocator, type Locator } from "@playw
  * 定位策略必须同时覆盖这两种情况，不能只靠按钮文字。
  */
 
-// 真调公司 LLM 网关：plan + build + validate（可能还有一次 repair+validate）。
+// 真调 LLM 网关：plan + build + validate（可能还有一次 repair+validate）。
 // 实测单次生成通常 30-90s；个别情况下游偶发 "Failed to fetch"（网关/网络瞬时抖动），
 // 应用本身在出错时会展示"重试"按钮 —— 我们允许对同一条需求点一次重试，而不是立刻判失败。
 const GENERATION_TIMEOUT = 150_000;
